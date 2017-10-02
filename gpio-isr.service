@@ -1,0 +1,11 @@
+[Unit]
+Description=GPIO ISR Counter
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/gpio-isr 
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

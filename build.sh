@@ -3,16 +3,26 @@
 echo Building Target...
 gcc -o gpio-isr gpio-isr.c -lpigpio -lrt -Wall -Werror
 
+echo
 echo Installing Binary...
 sudo cp -v ./gpio-isr /usr/local/bin
+
+echo
+echo Installing Push Service...
+sudo cp -v ./gpio-isr-submitData.sh /usr/local/bin
 
 if [ ! -e /etc/systemd/system/gpio-isr.service ]; then
  echo Installing systemd service...
  sudo cp -v ./gpio-isr.service /etc/systemd/system/
 fi
 
-echo Enabling Service...
+echo
+echo Enabling gpio-isr systemd Service...
 sudo systemctl enable gpio-isr.service
+sudo service gpio-isr start
+
+echo Enabling gpio-isr Push Service...
+sudo sh -c "echo '* * * * * pi /usr/local/bin/gpio-isr-submitData.sh' >/etc/cron.d/gpio-isr-submitData"
 
 echo
 echo Installation complete!

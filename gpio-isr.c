@@ -43,7 +43,7 @@ void myInterrupt(int pin, int level, uint32_t tick) {
 		return;
 	}
 	g_lastLevel[pin] = level;
-	if (pulseWidth < 30000 || pulseWidth > 120000) {
+	if (!g_expectedPeriod[pin] && (pulseWidth < 30000 || pulseWidth > 120000)) {
 		fprintf(stderr, "Ignoring INT on GPIO%d with pulseWidth %ums\n", pin, pulseWidth / 1000);
 		g_ignoreCount[pin]++;
 		return;
@@ -112,11 +112,13 @@ int main(int argc, char **argv)
 			break;
 		case 'w':
 			v = atoi(optarg);
-			if (v < 30 || v > 120) usage();
+			if (v < 1 || v > 120) usage();
 			if (lastPin == -1) {
 				for (i = 0; i < MAX_PINS; i++) g_expectedPeriod[i] = v ;
+				fprintf(stderr, "setting expected pulseWidth for all GPIO pins to %d ms\n", v);
 			} else {
 				g_expectedPeriod[lastPin] = v;
+				fprintf(stderr, "setting expected pulseWidth for GPIO%d to %d ms\n", lastPin, v);
 			}
 			break;
 		case 'U':

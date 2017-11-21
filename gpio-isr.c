@@ -19,6 +19,7 @@
 #define MAX_PINS 54
 #define VOLATILE_DIR "/run/gpio-isr"
 #define STATIC_DIR "/var/lib/gpio-isr"
+#define INT_TIMEOUT_MS 300000
 
 static volatile uint64_t g_totalCount[MAX_PINS];
 static volatile unsigned g_lastPeriod[MAX_PINS], g_ignoreCount[MAX_PINS], g_lastInterrupt[MAX_PINS], g_lastRise[MAX_PINS];
@@ -29,6 +30,16 @@ static unsigned g_monitor, g_debug, g_exit, g_dumpint = 300000000;
 static char *g_arg0;
 
 void myInterrupt(int pin, int level, uint32_t tick) {
+	if (level == PI_TIMEOUT) {
+		if (g_debug) {
+			fprintf(stderr, "INT timeout on GPIO%d\n", pin);
+		}
+		g_lastInterrupt[pin] = tick;
+		g_lastPeriod[pin] = -1;
+		g_ignoreCount[pin] = 2; /* ignore next pulse because the time since lastInterrupt is wrong */
+		g_pendingInt++;
+		return;
+	}
 	if (g_inverseLogic[pin]) level = 1 - level;
 	if (level) {
 		g_lastRise[pin] = tick;
@@ -63,7 +74,6 @@ void myInterrupt(int pin, int level, uint32_t tick) {
 	if (g_debug) {
 		fprintf(stderr, "INT on GPIO%u pulseWidth %ums totalCount %" PRIu64 " lastPeriod %ums\n", pin, pulseWidth / 1000, g_totalCount[pin], g_lastPeriod[pin]);
 	}
-	//XXX: handle timeout and set period to INF
 }
 
 void usage(void) {
@@ -192,8 +202,8 @@ int main(int argc, char **argv)
 			if (gpioSetPullUpDown(i, PI_PUD_DOWN)) fprintf(stderr, "FAILED\n"); else fprintf(stderr, "OK\n"); 
 		}
 		g_ignoreCount[i] = 2; /* ignore first pulse because we haven't seen the last pulse */
-		fprintf(stderr, "setting up interrupt handler for GPIO%d -> ", i);
-		if (gpioSetISRFunc(i, EITHER_EDGE, 0, &myInterrupt)) fprintf(stderr, "FAILED\n"); else fprintf(stderr, "OK\n");
+		fprintf(stderr, "setting up interrupt handler for GPIO%d with a timeout of %d ms -> ", i, INT_TIMEOUT_MS);
+		if (gpioSetISRFunc(i, EITHER_EDGE, INT_TIMEOUT_MS, &myInterrupt)) fprintf(stderr, "FAILED\n"); else fprintf(stderr, "OK\n");
 		if (!g_monitor) {
 			snprintf(buf, PATH_MAX, "%s/pin%d.totalCount", STATIC_DIR, i);
 			file = fopen(buf, "r");
@@ -240,7 +250,7 @@ int main(int argc, char **argv)
 						if (g_debug) fprintf(stderr, "updated %s for GPIO%d to %" PRIu64 "\n", buf, i, g_totalCount[i]);
 						fclose(file);
 					}
-					if (lastdump2 > 0 && !g_ignoreCount[i]) {
+					if (lastdump2 > 0 && (!g_ignoreCount[i] || g_lastPeriod[i] == -1)) {
 						snprintf(buf, PATH_MAX, "%s/pin%d.lastPeriod", VOLATILE_DIR, i);
 						file = fopen(buf, "w");
 						if (file) {
